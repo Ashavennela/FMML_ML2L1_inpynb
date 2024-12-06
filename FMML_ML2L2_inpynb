@@ -1,0 +1,339 @@
+Module 2: Appreciating, Interpreting and Visualizing Data
+Lab 2: Principal Components Analysis (PCA)
+Coordinator: Aswin Jose
+This lab is designed to give you an understanding of Principal Components Analysis (PCA). PCA has been called one of the most valuable results from applied linear algebra. PCA is used abundantly in all forms of analysis - from neuroscience to computer graphics - because it is a simple, non-parametric method of extracting relevant information from confusing data sets.
+
+Principal Component Analysis (PCA) is a linear dimensionality reduction technique that can be utilized for extracting information from a high-dimensional space by projecting it into a lower-dimensional sub-space. It tries to preserve the essential parts that have more variation of the data and remove the non-essential parts with fewer variation.
+
+PCA is generally used for 2 applications:
+
+Visualization of high dimentional datasets.
+Reducing number of features, thereby speeding up ML algorithms.
+We will be primarily focussing on the first application in this lab.
+
+
+[ ]
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.datasets import load_breast_cancer
+In this lab, we will be using the breast_cancer dataset. The data has 569 samples with thirty features, and each sample has a label associated with it (benign or malignant).
+
+
+[ ]
+breast_data = load_breast_cancer().data
+print("Features:", breast_data.shape)  ### 569 rows and 30 columns expected
+
+breast_labels = np.reshape(load_breast_cancer().target, (569,1))
+print("Target:", breast_labels.shape) ### 569 rows and 1 target column expected
+Features: (569, 30)
+Target: (569, 1)
+
+[ ]
+## Creating a Pandas dataframe for the dataset with the last column as the target variable
+
+final_breast_data = np.concatenate([breast_data, breast_labels],axis=1)
+breast_dataset = pd.DataFrame(final_breast_data)
+
+features = load_breast_cancer().feature_names
+features_labels = np.append(features,'label')
+breast_dataset.columns = features_labels
+breast_dataset.head()
+
+
+[ ]
+# Dividing the values into the features and labels for convenience later on
+
+X = breast_dataset.iloc[:,:30].values
+y = breast_dataset.iloc[:,30].values
+
+print(np.shape(X), np.shape(y))
+(569, 30) (569,)
+Step By Step Computation Of PCA
+The below steps need to be followed to perform dimensionality reduction using PCA:
+
+Standardization of the data
+
+Computing the covariance matrix
+
+Calculating the eigenvectors and eigenvalues
+
+Computing the Principal Components
+
+Reducing the dimensions of the data set
+
+1. Standardization of the data
+It is a common practice to normalize your data before feeding it to any machine learning algorithm.
+
+To apply normalization, you will import StandardScaler module from the sklearn library and then apply scaling by doing fit_transform on the feature data. While applying StandardScaler, each feature of your data should be normally distributed such that it will scale the distribution to a mean of zero and a standard deviation of one.
+
+
+[ ]
+from sklearn.preprocessing import StandardScaler
+X_std = StandardScaler().fit_transform(X)
+
+print(np.std(X_std))
+1.0
+Here's the data after scaling. Yes, we do loose the numerical meaning of the data, but that's okay. We are more interested in the relative positions of the data points with respect to each other.
+
+
+[ ]
+X_std_df = pd.DataFrame(X_std)
+X_std_df.columns = features
+X_std_df.head()
+
+2. Computing the covariance matrix
+Recall that covariance is always measured between 2 dimensions. If we have a data set with more than 2 dimensions, there is more than one covariance measurement that can be calculated. For example, from a 3 dimensional data set (dimensions x,y,z) you could calculate cov(x,y), cov(y,z) and cov(x,z). In fact, for an n-dimensional data set, you can calculate N combinatorial 2 different covariances.
+
+Here we have 30 different features, so we will have to compute 435 different covariances.
+
+
+[ ]
+mean_vec = np.mean(X_std, axis=0) ## Computing feature wise means
+
+# Covariance matrix = i/(N-1) * X^T * X
+# where X is the normalized feature matrix and N is the number of data points (rows)
+
+cov_mat = 1/ (X_std.shape[0]-1) * (X_std - mean_vec).T.dot(X_std - mean_vec)
+
+print("Covariance matrix first 5 rows and columns:")
+print(cov_mat[0:5, 0:5])
+Covariance matrix first 5 rows and columns:
+[[ 1.00176056  0.32435193  0.99961207  0.98909547  0.17088151]
+ [ 0.32435193  1.00176056  0.33011322  0.32165099 -0.02342969]
+ [ 0.99961207  0.33011322  1.00176056  0.98824361  0.20764309]
+ [ 0.98909547  0.32165099  0.98824361  1.00176056  0.17734005]
+ [ 0.17088151 -0.02342969  0.20764309  0.17734005  1.00176056]]
+
+[ ]
+cov_mat.shape
+(30, 30)
+A perhaps simpler way to do this is by using the numpy's covariance module "np.cov". However note that it takes as input the feature matrix with features in different rows, so in our application, we would be taking a transpose of the feature matrix before applying np.cov().
+
+
+[ ]
+cov_mat_numpy = np.cov(X_std.T)
+
+print("Covariance matrix first 5 rows and columns:")
+print(cov_mat_numpy[0:5, 0:5])
+Covariance matrix first 5 rows and columns:
+[[ 1.00176056  0.32435193  0.99961207  0.98909547  0.17088151]
+ [ 0.32435193  1.00176056  0.33011322  0.32165099 -0.02342969]
+ [ 0.99961207  0.33011322  1.00176056  0.98824361  0.20764309]
+ [ 0.98909547  0.32165099  0.98824361  1.00176056  0.17734005]
+ [ 0.17088151 -0.02342969  0.20764309  0.17734005  1.00176056]]
+3. Calculating the eigenvectors and eigenvalues
+Since the covariance matrix is square, we can calculate the eigenvectors and eigenvalues for this matrix. These are rather important, as they tell us useful information about our data.
+
+image.png
+
+See how one of the eigenvectors goes through the middle of the points, like drawing a line of best fit? That eigenvector is showing us how these two data sets are related along that line. The second eigenvector gives us the other, less important, pattern in the data, that all the points follow the main line, but are off to the side of the main line by some amount.
+
+So, by this process of taking the eigenvectors of the covariance matrix, we have been able to extract lines that characterise the data.
+
+
+[ ]
+eig_vals, eig_vecs = np.linalg.eig(cov_mat)
+
+[ ]
+eig_vals.shape, eig_vecs.shape
+((30,), (30, 30))
+4. Computing the Principal Components
+
+[ ]
+eig_pairs = [(np.abs(eig_vals[i]), eig_vecs[:,i]) for i in range(len(eig_vals))]
+eig_pairs.sort(key=lambda x: x[0], reverse=True)
+
+tot = sum(eig_vals)
+var_exp = [(i / tot)*100 for i in sorted(eig_vals, reverse=True)]
+print("Explained variance:")
+print(var_exp)
+
+cum_var_exp = np.cumsum(var_exp)
+print("Cumulative explained variance:")
+print(cum_var_exp)
+
+# Plotting the variance explained by each component and the cumulative variance explained
+
+plt.figure(figsize=(6 , 4))
+plt.bar(range(30), var_exp, alpha=0.5, align='center', label='individual explained variance')
+plt.step(range(30), cum_var_exp, where='mid', label='cumulative explained variance')
+plt.ylabel('Explained variance ratio')
+plt.xlabel('Principal components')
+plt.legend(loc='best')
+plt.tight_layout()
+plt.show()
+
+So, the first principal component alone explains more than 40% variance in the dataset. Also note that considering all the 30 dimensions explains 100% of the variance in the dataset as expected.
+
+Choosing a suitable number of components for further visualizations is generally based on the cumulative sum of PCs. The first 2 PCs explain nearly 65% variance, and the first 3 explain close to 75% variance.
+
+Lets now try and reduce the dimensions of our dataset to the first 2 and 3 principal components
+
+5. Reducing the dimensions of the data set
+
+[ ]
+matrix_w = np.hstack((eig_pairs[0][1].reshape(30,1),
+                      eig_pairs[1][1].reshape(30,1),
+                      eig_pairs[2][1].reshape(30,1)))
+
+Y = X_std.dot(matrix_w)
+
+print(Y)
+[[ 9.19283683  1.94858307 -1.12316616]
+ [ 2.3878018  -3.76817174 -0.52929269]
+ [ 5.73389628 -1.0751738  -0.55174759]
+ ...
+ [ 1.25617928 -1.90229671  0.56273053]
+ [10.37479406  1.67201011 -1.87702933]
+ [-5.4752433  -0.67063679  1.49044308]]
+Now, that you have spent such a long time building this final matrix Y which has reduced each datapoint to 3 dimensions......
+
+All of this can also be done in 2 lines by using sklearn's PCA module.
+
+
+[ ]
+from sklearn.decomposition import PCA
+
+sklearn_pca = PCA(n_components=3)
+Y_sklearn = sklearn_pca.fit_transform(X_std)
+
+print(Y_sklearn)
+[[ 9.19283683  1.94858371 -1.12316183]
+ [ 2.3878018  -3.76817122 -0.52928915]
+ [ 5.73389628 -1.07517379 -0.5517486 ]
+ ...
+ [ 1.25617927 -1.90229702  0.56272878]
+ [10.37479406  1.67201002 -1.87702992]
+ [-5.47524329 -0.67063549  1.49044996]]
+Let's visualize our dataset in 2 and 3 dimensions now
+
+[ ]
+final_df = pd.DataFrame(columns=["PC1", "PC2", "PC3", "Label"])
+
+for i in range(len(Y)):
+
+    dicti = dict()
+
+    dicti["PC1"] = Y[i, 0]
+    dicti["PC2"] = Y[i, 1]
+    dicti["PC3"] = Y[i, 2]
+    if (int(breast_labels[i][0]) == 0):
+      dicti["Label"] = "Benign"
+    else:
+      dicti["Label"] = "Malignant"
+
+    final_df = pd.concat([final_df, pd.DataFrame([dicti])], ignore_index=True)
+
+
+final_df.head()
+
+
+[ ]
+import plotly.graph_objects as go
+import plotly.express as px
+
+[ ]
+for_x = final_df.PC1.tolist()
+for_y = final_df.PC2.tolist()
+for_label = final_df.Label.tolist()
+for_hover = final_df.Label.tolist()
+
+fig = px.scatter(x=for_x, y=for_y, color=for_label,
+                 title="Principal Component Axis",
+                 color_discrete_map={"Benign": "aqua", "Malignant": "yellow"})
+
+fig.update_layout(
+    xaxis=dict(title = 'PC1', showgrid=True, ticks='inside', zeroline=True, mirror=True, showline=True, linecolor='white'),
+    yaxis=dict(title = 'PC2', showgrid=True, ticks='inside', zeroline=True, mirror=True, showline=True, linecolor='white'),
+    plot_bgcolor='#555555',
+    font=dict(
+        family="Times New Roman",
+        size=16,
+        color="Black"))
+fig.update_traces(marker=dict(size=8,))
+
+fig.show(renderer = "colab")
+
+Question:
+Referring to the plot above, can you reason why PCA can be a good candidate before training models for Machine learning?
+
+Answer:
+You can see that the first 2 principal components were able to differentiate the benign and malignant tumours in our breast cancer dataset. This motivates the use of the second application of PCA, which was to reduce the number of features in the dataset so that the machine learning algorithm can be trained without overfitting.
+
+Let us now try and visualize this in the first 3 Principal Components space.
+
+
+[ ]
+fig = px.scatter_3d(final_df, x='PC1', y='PC2', z='PC3', color='Label', title="Principal Component Axis")
+fig.update_traces(marker=dict(size=6,))
+
+fig.show(renderer = "colab")
+
+Feel free to explore this interactive plot by PLOTLY, which is also another great tool for visualizations. You can zoom, pan, rotate, turn and download this plot.
+
+Exersise
+
+How many components do you need to retain 90% of the variance in the data?
+To determine how many components are required to retain 90% of the variance in the data, typically **Principal Component Analysis (PCA)** is used. PCA transforms the data into a set of orthogonal (uncorrelated) components that capture the variance in the data. The number of components needed to retain 90% of the variance can be found by:
+
+1. **Standardizing the Data** (if needed): PCA is affected by the scale of the features, so it’s often necessary to standardize the data before applying PCA. This ensures that all features contribute equally to the variance.
+
+2. **Performing PCA**: When applying PCA, each component (principal component) corresponds to an eigenvalue, which represents the amount of variance captured by that component. The cumulative sum of the eigenvalues (or the explained variance ratio) indicates how much of the total variance is retained by each successive principal component.
+
+3. **Selecting the Number of Components**:
+   - Calculate the cumulative explained variance ratio for each component. 
+   - Find the point at which the cumulative explained variance exceeds 90%.
+
+### Steps:
+1. **Compute the Eigenvalues and Explained Variance**: After performing PCA, you can retrieve the explained variance for each component. 
+   
+2. **Cumulative Explained Variance**: The cumulative explained variance is calculated by summing the explained variance of each component up to that point.
+
+3. **Find the Minimum Number of Components**: The smallest number of components required to reach 90% of the total variance corresponds to the point where the cumulative explained variance first exceeds 90%.
+
+### Example:
+
+Let’s say we have a dataset with 10 features. After performing PCA, the explained variance ratios of the components might look like this:
+
+| Component | Explained Variance Ratio |
+|-----------|--------------------------|
+| 1         | 0.40                     |
+| 2         | 0.25                     |
+| 3         | 0.15                     |
+| 4         | 0.10                     |
+| 5         | 0.05                     |
+| 6         | 0.03                     |
+| 7         | 0.02                     |
+| 8         | 0.01                     |
+| 9         | 0.01                     |
+| 10        | 0.01                     |
+
+The cumulative explained variance would be:
+
+| Component | Cumulative Explained Variance |
+|-----------|-------------------------------|
+| 1         | 0.40                          |
+| 2         | 0.65                          |
+| 3         | 0.80                          |
+| 4         | 0.90                          |
+| 5         | 0.95                          |
+| 6         | 0.98                          |
+| 7         | 0.99                          |
+| 8         | 1.00                          |
+
+In this case, **4 components** are needed to retain 90% of the variance.
+
+### Conclusion:
+To determine the number of components to retain 90% of the variance in your dataset, you need to perform PCA, compute the explained variance ratio, and identify the smallest number of components that give you a cumulative explained variance of 90%. This number varies depending on the dataset's structure and dimensionality.
+Find one other use case that makes use of PCA and summarize how it is applied to the problem domain.
+Some interesting references:
+https://builtin.com/data-science/step-step-explanation-principal-component-analysis
+
+http://www.cs.otago.ac.nz/cosc453/student_tutorials/principal_components.pdf
+
+https://www.cs.cmu.edu/~elaw/papers/pca.pdf
+
+https://towardsdatascience.com/pca-using-python-scikit-learn-e653f8989e60
+
